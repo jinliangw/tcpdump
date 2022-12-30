@@ -218,6 +218,8 @@ LIBNETDISSECT_SRC=\
 	print-sflow.c \
 	print-sip.c \
 	print-sl.c \
+	print-nvme-mi.c \
+	print-mctp.c \
 	print-sll.c \
 	print-slow.c \
 	print-smtp.c \

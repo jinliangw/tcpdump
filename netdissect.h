@@ -763,6 +763,9 @@ extern void zephyr_print(netdissect_options *, const u_char *, u_int);
 extern void zmtp1_datagram_print(netdissect_options *, const u_char *, const u_int);
 extern void zmtp1_print(netdissect_options *, const u_char *, u_int);
 
+extern void mctp_print(netdissect_options *ndo, const u_char *p, u_int caplen);
+extern void nvme_mi_print(netdissect_options *ndo, const u_char *p, u_int caplen);
+
 /* checksum routines */
 extern void init_checksum(void);
 extern uint16_t verify_crc10_cksum(uint16_t, const u_char *, int);

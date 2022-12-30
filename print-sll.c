@@ -144,6 +144,7 @@ struct sll2_header {
  */
 #define LINUX_SLL_P_802_3	0x0001	/* Novell 802.3 frames without 802.2 LLC header */
 #define LINUX_SLL_P_802_2	0x0004	/* 802.2 frames (not D/I/X Ethernet) */
+#define LINUX_SLL_P_MCTP        0x00fa  /* MCTP packet */
 
 static const struct tok sll_pkttype_values[] = {
     { LINUX_SLL_HOST, "In" },
@@ -286,7 +287,11 @@ recurse:
 				goto unknown;	/* unknown LLC type */
 			hdrlen += llc_hdrlen;
 			break;
-
+        case 0xFA:
+            // TODO: figure out whether the 0xFA is the uniqure identifier for
+            // MCTP packets
+			mctp_print(ndo, p, caplen);
+			break;
 		default:
 			/*FALLTHROUGH*/
 
