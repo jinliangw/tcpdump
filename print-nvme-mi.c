@@ -162,6 +162,129 @@ static const struct tok control_primitive_opcode_values[] = {
     { 0, NULL }
 };
 
+static const struct tok log_page_identifies_values[] = {
+    { 0x00, "Supported Log Pages" },
+    { 0x01, "Error Information" },
+    { 0x02, "SMART/Health Information" },
+    { 0x03, "Firmware Slot Information" },
+    { 0x04, "Changed Namespace List" },
+    { 0x05, "Commands Supported and Effects" },
+    { 0x06, "Device Self-test" },
+    { 0x07, "Telemetry Host-Initiated" },
+    { 0x08, "Telemetry Controller-Initiated " },
+    { 0x09, "Endurance Group Information" },
+    { 0x0A, "Predictable Latency Per NVM Set" },
+    { 0x0B, "Predictable Latency Event Aggregate" },
+    { 0x0C, "Asymmetric Namespace Access" },
+    { 0x0D, "Persistent Event Log" },
+    { 0x0F, "Endurance Group Event Aggregate" },
+    { 0x10, "Media Unit Status" },
+    { 0x11, "Supported Capacity Configuration List" },
+    { 0x12, "Feature Identifiers Supported and Effects" },
+    { 0x13, "NVMe-MI Commands Supported and Effects" },
+    { 0x14, "Command and Feature Lockdown" },
+    { 0x15, "Boot Partition" },
+    { 0x16, "Rotational Media Information" },
+    { 0x70, "Discovery" },
+    { 0x80, "Reservation Notification" },
+    { 0x81, "Sanitize Status" },
+    { 0, NULL }
+};
+
+static const struct tok identify_cns_values[] = {
+    { 0x00, "Identify Namespace data structure" },
+    { 0x01, "Identify Controller data structure" },
+    { 0x02, "Active Namespace ID list" },
+    { 0x03, "Namespace Identification Descriptor list" },
+    { 0x04, "NVM Set List" },
+    { 0x05, "Identify Namespace data structure(I/O NSID)" },
+    { 0x06, "Identify Controller data structure(I/O NSID)" },
+    { 0x07, "Active Namespace ID list(I/O)" },
+    { 0x08, "Independent Identify Namespace data structure(I/O)" },
+    { 0x0A, "Allocated Namespace ID list" },
+    { 0x0B, "Predictable Latency Event Aggregate" },
+    { 0x0C, "Asymmetric Namespace Access" },
+    { 0x0D, "Persistent Event Log " },
+    { 0x0F, "Endurance Group Event Aggregate" },
+    { 0x10, "Media Unit Status" },
+    { 0x11, "Identify Namespace data structure(NSID)" },
+    { 0x12, "Controller List(attached to NSID)" },
+    { 0x13, "Controller List(exist in NVM)" },
+    { 0x14, "Primary Controller Capabilities data structure" },
+    { 0x15, "Secondary Controller list" },
+    { 0x16, "Namespace Granularity list" },
+    { 0x17, "UUID List" },
+    { 0x18, "Domain List" },
+    { 0x19, "Endurance Group List" },
+    { 0x1A, "Allocated Namespace ID list(I/O)" },
+    { 0x1B, "Identify Namespace data structure(I/O)" },
+    { 0x1C, "I/O Command Set data structure" },
+    { 0, NULL }
+};
+
+
+static void nvme_mi_print_get_log_page_request(netdissect_options *ndo,
+        const struct admin_request_header *request)
+{
+    uint32_t dw10 =  GET_LE_U_4(request->dw10);
+    uint32_t dw11 =  GET_LE_U_4(request->dw11);
+    uint32_t dw12 =  GET_LE_U_4(request->dw12);
+    uint32_t dw13 =  GET_LE_U_4(request->dw13);
+    uint32_t dw14 =  GET_LE_U_4(request->dw14);
+
+    uint64_t numd =  ((dw11 & 0xFFFF) << 16) | (dw10 >> 16);
+    uint64_t lpo = ((uint64_t)dw13 << 32) | dw12;
+
+    numd += 1; // Inc by 1 for 0's based NUMD
+    ND_PRINT("\n\t          LID 0x%x(%s), LPO %llu"
+            ", NUMD %lu(%llu B), RAE %u, LSP 0x%x, LSI 0x%x, CSI 0x%x, OT %u"
+            ", UUIDIndex %u",
+            dw10 & 0xff, // LID
+            tok2str(log_page_identifies_values, "unknown", dw10 & 0xff),
+            lpo,         // LPO
+            numd,        // NUMD
+            numd * 4,    // Dwords to bytes
+            (dw10 >> 15) & 0x1, // RAE
+            (dw10 >> 8) & 0x3f, // LSP
+            (dw11 >> 16),       // LSI
+            (dw14 >> 24),       // CSI
+            (dw14 >> 23) & 0x1, // OT
+            dw14 & 0x7f         // UUID Index
+            );
+}
+
+static void nvme_mi_print_identify_request(netdissect_options *ndo,
+        const struct admin_request_header *request)
+{
+    uint32_t dw10 =  GET_LE_U_4(request->dw10);
+    uint32_t dw11 =  GET_LE_U_4(request->dw11);
+    uint32_t dw14 =  GET_LE_U_4(request->dw14);
+    ND_PRINT("\n\t          CNS 0x%x(%s), CNTID %u, CSI 0x%x"
+            ", CNSID 0x%x, UUIDIndex %u",
+            dw10 & 0xff,    // CNS
+            tok2str(identify_cns_values, "unknown", dw10 & 0xff),
+            dw10 >> 16,     // CNTID
+            dw11 >> 24,     // CSI
+            dw11 & 0xFFFF,  // CNS Specific Identifier
+            dw14 & 0x7f     // UUID Index
+            );
+}
+
+// Doesn't use dw15 as it may not be included in the current message
+static void nvme_mi_print_admin_cmd_detail(netdissect_options *ndo,
+        const struct admin_request_header *request)
+{
+    uint8_t opcode = GET_U_1(request->opcode);
+    switch (opcode) {
+        case 0x02:
+            nvme_mi_print_get_log_page_request(ndo, request);
+            break;
+        case 0x06:
+            nvme_mi_print_identify_request(ndo, request);
+            break;
+    }
+}
+
 
 static void nvme_mi_print_admin(netdissect_options *ndo, const u_char *p, u_int caplen)
 {
@@ -202,17 +325,27 @@ static void nvme_mi_print_admin(netdissect_options *ndo, const u_char *p, u_int 
         ND_PRINT(", DW3 0x%x",  GET_LE_U_4(request->dw3));
         ND_PRINT(", DW4 0x%x",  GET_LE_U_4(request->dw4));
         ND_PRINT(", DW5 0x%x",  GET_LE_U_4(request->dw5));
-        ND_PRINT(", DOFST %u",  GET_LE_U_4(request->data_offset));
+        ND_PRINT("\n\t%sDOFST %u", "          ",
+                GET_LE_U_4(request->data_offset));
         ND_PRINT(", DLEN %u",   GET_LE_U_4(request->data_length));
         ND_PRINT(", DW10 0x%x", GET_LE_U_4(request->dw10));
         ND_PRINT(", DW11 0x%x", GET_LE_U_4(request->dw11));
         ND_PRINT(", DW12 0x%x", GET_LE_U_4(request->dw12));
         ND_PRINT(", DW13 0x%x", GET_LE_U_4(request->dw13));
         ND_PRINT(", DW14 0x%x", GET_LE_U_4(request->dw14));
-        ND_PRINT(", DW15 0x%x", GET_LE_U_4(request->dw15));
+        // The minimal MCTP pakcet size is 68B (4B MCTP header + 64B payload)
+        // so it is likey that we have dw14 but no dw15, so let's check and return
+        if (caplen < ADMIN_REQUEST_HEADER_SIZE)
+        {
+            nvme_mi_print_admin_cmd_detail(ndo, request);
+            return;
+        }
 
+        ND_PRINT(", DW15 0x%x", GET_LE_U_4(request->dw15));
         p += ADMIN_REQUEST_HEADER_SIZE;
         caplen -= ADMIN_REQUEST_HEADER_SIZE;
+
+        nvme_mi_print_admin_cmd_detail(ndo, request);
     } else {
         response = (const struct admin_response_header*)p;
         status = GET_LE_U_2(response->status);
